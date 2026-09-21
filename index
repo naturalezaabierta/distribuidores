@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Distribuidores a Nivel Nacional | Naturaleza Abierta</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --verde: #2f6b3a;
+    --verde-claro: #eaf3ea;
+    --texto: #23291f;
+    --borde: #dbe4db;
+    box-sizing: border-box;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--texto);
+  }
+  .lienzo {
+    width: 100%;
+    max-width: 100%;
+    padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+  }
+  header {
+    background: var(--verde);
+    color: #fff;
+    padding: 28px 20px calc(20px + env(safe-area-inset-top, 0));
+    text-align: center;
+  }
+  header h1 { margin: 0 0 6px; font-size: 1.5rem; }
+  header p { margin: 0; opacity: .9; font-size: .95rem; }
+
+  .aviso {
+    background: #fff6e0;
+    border-bottom: 1px solid #f0dca0;
+    color: #6b5006;
+    padding: 14px 20px;
+    font-size: .88rem;
+    text-align: center;
+  }
+
+  .estado-bloque { border-bottom: 1px solid var(--borde); }
+  .estado-cabecera {
+    width: 100%;
+    text-align: left;
+    background: var(--verde-claro);
+    border: none;
+    padding: 16px 20px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--verde);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+  }
+  .estado-cabecera .flecha { transition: transform .2s; }
+  .estado-cabecera.abierto .flecha { transform: rotate(90deg); }
+  .estado-contenido {
+    display: none;
+    padding: 4px 0 8px;
+  }
+  .estado-contenido.abierto { display: block; }
+
+  .ciudad-titulo {
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #6b7a6b;
+    padding: 12px 20px 4px;
+  }
+
+  .tarjeta-distribuidor {
+    display: flex;
+    gap: 14px;
+    padding: 14px 20px;
+    border-top: 1px solid #f0f2ef;
+    align-items: flex-start;
+  }
+  .foto {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--verde-claro);
+    flex-shrink: 0;
+  }
+  .info { flex: 1; min-width: 0; }
+  .nombre { font-weight: 600; font-size: .98rem; }
+  .productos-lista {
+    margin: 6px 0 10px;
+    padding: 0;
+    list-style: none;
+    font-size: .88rem;
+    color: #444;
+  }
+  .productos-lista li { padding: 2px 0; }
+  .whatsapp-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #25D366;
+    color: #fff;
+    text-decoration: none;
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: .85rem;
+    font-weight: 600;
+  }
+
+  .vacio, .cargando {
+    padding: 40px 20px;
+    text-align: center;
+    color: #6b7a6b;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --verde-claro: #16241a;
+      --borde: #2a332a;
+      --texto: #eef1ee;
+    }
+    :root:not([data-theme="light"]) html, :root:not([data-theme="light"]) body { background: #10140f; }
+    :root:not([data-theme="light"]) .productos-lista { color: #cfd6cf; }
+  }
+</style>
+</head>
+<body>
+<div class="lienzo">
+  <header>
+    <h1>Distribuidores a Nivel Nacional</h1>
+    <p>Encuentra un distribuidor con stock disponible en tu estado</p>
+  </header>
+
+  <div class="aviso">
+    La responsabilidad de entrega y pago con cada distribuidor es exclusiva del distribuidor.
+    Naturaleza Abierta solo facilita el contacto entre las partes.
+  </div>
+
+  <div id="lista">
+    <div class="cargando">Cargando distribuidores…</div>
+  </div>
+</div>
+
+<script>
+  // --- Configuración de conexión a Supabase (proyecto Valentina 2) ---
+  const SUPABASE_URL = "https://tgvcvnhrwswuxgjbpvwq.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRndmN2bmhyd3N3dXhnamJwdndxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzMzQ3NjgsImV4cCI6MjEwNDkxMDc2OH0.9_n-EIfyxn6rSWbELMZfxnRVkBuQd1ZqKa-Z61mAHfA";
+  const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function slugify(t) {
+    return (t || "").toString().trim();
+  }
+
+  // Convierte un teléfono guardado en cualquier formato a solo dígitos para wa.me
+  function soloDigitos(tel) {
+    return (tel || "").replace(/[^0-9]/g, "");
+  }
+
+  function mensajeWhatsApp(nombreProducto, estado) {
+    const texto = `Hola! Vengo de la plataforma de Naturaleza Abierta y estoy interesado en: ${nombreProducto}. ¿Aún lo tienes disponible? (Zona: ${estado})`;
+    return encodeURIComponent(texto);
+  }
+
+  async function cargarDirectorio() {
+    const cont = document.getElementById("lista");
+
+    const { data, error } = await client
+      .from("inventario_distribuidor")
+      .select(`
+        cantidad_disponible,
+        precio_venta_propio,
+        producto_id,
+        productos_servicios ( nombre ),
+        afiliados (
+          afiliado_id,
+          foto_url,
+          usuario_id,
+          clientes ( nombre, apellido, telefono, zona_estado_ciudad )
+        )
+      `)
+      .gt("cantidad_disponible", 0);
+
+    if (error) {
+      cont.innerHTML = `<div class="vacio">No se pudo cargar el directorio en este momento.</div>`;
+      console.error(error);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      cont.innerHTML = `<div class="vacio">Todavía no hay distribuidores con stock disponible.</div>`;
+      return;
+    }
+
+    // Agrupar por afiliado, y luego por estado
+    const porAfiliado = {};
+    for (const fila of data) {
+      const af = fila.afiliados;
+      if (!af) continue;
+      const id = af.afiliado_id;
+      if (!porAfiliado[id]) {
+        const cliente = af.clientes || {};
+        const zona = slugify(cliente.zona_estado_ciudad);
+        const partes = zona.split(",").map(p => p.trim()).filter(Boolean);
+        const estado = partes[0] || "Sin estado registrado";
+        const ciudad = partes[1] || "";
+        porAfiliado[id] = {
+          nombre: [cliente.nombre, cliente.apellido].filter(Boolean).join(" ") || "Distribuidor",
+          telefono: cliente.telefono || "",
+          foto: af.foto_url || "",
+          estado, ciudad,
+          productos: []
+        };
+      }
+      porAfiliado[id].productos.push({
+        nombre: fila.productos_servicios ? fila.productos_servicios.nombre : "Producto",
+        cantidad: fila.cantidad_disponible,
+        precio: fila.precio_venta_propio
+      });
+    }
+
+    // Agrupar por estado > ciudad
+    const porEstado = {};
+    Object.values(porAfiliado).forEach(d => {
+      if (!porEstado[d.estado]) porEstado[d.estado] = {};
+      const ciudadKey = d.ciudad || "General";
+      if (!porEstado[d.estado][ciudadKey]) porEstado[d.estado][ciudadKey] = [];
+      porEstado[d.estado][ciudadKey].push(d);
+    });
+
+    cont.innerHTML = "";
+    Object.keys(porEstado).sort().forEach((estado, idx) => {
+      const bloque = document.createElement("div");
+      bloque.className = "estado-bloque";
+
+      const btn = document.createElement("button");
+      btn.className = "estado-cabecera";
+      btn.innerHTML = `<span>${estado}</span><span class="flecha">▸</span>`;
+
+      const contenido = document.createElement("div");
+      contenido.className = "estado-contenido";
+
+      Object.keys(porEstado[estado]).sort().forEach(ciudad => {
+        if (ciudad !== "General") {
+          const t = document.createElement("div");
+          t.className = "ciudad-titulo";
+          t.textContent = ciudad;
+          contenido.appendChild(t);
+        }
+        porEstado[estado][ciudad].forEach(d => {
+          const tarjeta = document.createElement("div");
+          tarjeta.className = "tarjeta-distribuidor";
+
+          const productosHtml = d.productos.map(p => {
+            const precio = p.precio ? ` — $${Number(p.precio).toFixed(2)}` : "";
+            return `<li>${p.nombre} (${p.cantidad} disp.)${precio}</li>`;
+          }).join("");
+
+          const primerProducto = d.productos[0] ? d.productos[0].nombre : "tus productos";
+          const numero = soloDigitos(d.telefono);
+          const linkWA = numero
+            ? `https://wa.me/${numero}?text=${mensajeWhatsApp(primerProducto, d.estado)}`
+            : "#";
+
+          tarjeta.innerHTML = `
+            <img class="foto" src="${d.foto || ''}" alt="" onerror="this.style.visibility='hidden'">
+            <div class="info">
+              <div class="nombre">${d.nombre}</div>
+              <ul class="productos-lista">${productosHtml}</ul>
+              <a class="whatsapp-btn" href="${linkWA}" target="_blank" rel="noopener">💬 Estoy interesado</a>
+            </div>
+          `;
+          contenido.appendChild(tarjeta);
+        });
+      });
+
+      btn.addEventListener("click", () => {
+        btn.classList.toggle("abierto");
+        contenido.classList.toggle("abierto");
+      });
+
+      // El primer estado abierto por defecto
+      if (idx === 0) { btn.classList.add("abierto"); contenido.classList.add("abierto"); }
+
+      bloque.appendChild(btn);
+      bloque.appendChild(contenido);
+      cont.appendChild(bloque);
+    });
+  }
+
+  cargarDirectorio();
+</script>
+</body>
+</html>
