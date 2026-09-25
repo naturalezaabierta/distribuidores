@@ -4,13 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Distribuidores a Nivel Nacional | Naturaleza Abierta</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --verde: #2f6b3a;
     --verde-claro: #eaf3ea;
     --texto: #23291f;
     --borde: #dbe4db;
+    --fondo: #ffffff;
+    --suave: #6b7a6b;
+    --lista: #444444;
     box-sizing: border-box;
   }
   * { box-sizing: border-box; }
@@ -18,8 +20,7 @@
     margin: 0;
     padding: 0;
     width: 100%;
-    height: 100%;
-    background: #fff;
+    background: var(--fondo);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     color: var(--texto);
   }
@@ -31,7 +32,7 @@
   header {
     background: var(--verde);
     color: #fff;
-    padding: 28px 20px calc(20px + env(safe-area-inset-top, 0));
+    padding: 28px 20px 20px;
     text-align: center;
   }
   header h1 { margin: 0 0 6px; font-size: 1.5rem; }
@@ -60,28 +61,27 @@
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
+    font-family: inherit;
   }
+  .estado-cabecera:focus-visible { outline: 3px solid #25D366; outline-offset: -3px; }
   .estado-cabecera .flecha { transition: transform .2s; }
   .estado-cabecera.abierto .flecha { transform: rotate(90deg); }
-  .estado-contenido {
-    display: none;
-    padding: 4px 0 8px;
-  }
+  .estado-contenido { display: none; padding: 4px 0 8px; }
   .estado-contenido.abierto { display: block; }
 
   .ciudad-titulo {
     font-size: .8rem;
-    text-transform: uppercase;
     letter-spacing: .04em;
-    color: #6b7a6b;
+    color: var(--suave);
     padding: 12px 20px 4px;
+    font-weight: 600;
   }
 
   .tarjeta-distribuidor {
     display: flex;
     gap: 14px;
     padding: 14px 20px;
-    border-top: 1px solid #f0f2ef;
+    border-top: 1px solid var(--borde);
     align-items: flex-start;
   }
   .foto {
@@ -99,36 +99,43 @@
     padding: 0;
     list-style: none;
     font-size: .88rem;
-    color: #444;
+    color: var(--lista);
   }
   .productos-lista li { padding: 2px 0; }
   .whatsapp-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: #25D366;
+    background: #1a7f43;
     color: #fff;
     text-decoration: none;
-    padding: 8px 14px;
+    padding: 9px 15px;
     border-radius: 20px;
     font-size: .85rem;
     font-weight: 600;
   }
+  .whatsapp-btn:focus-visible { outline: 3px solid var(--verde); outline-offset: 2px; }
 
   .vacio, .cargando {
     padding: 40px 20px;
     text-align: center;
-    color: #6b7a6b;
+    color: var(--suave);
+    line-height: 1.5;
   }
+  .vacio a { color: var(--verde); font-weight: 600; }
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --verde-claro: #16241a;
       --borde: #2a332a;
       --texto: #eef1ee;
+      --fondo: #10140f;
+      --suave: #a3b0a3;
+      --lista: #cfd6cf;
     }
-    :root:not([data-theme="light"]) html, :root:not([data-theme="light"]) body { background: #10140f; }
-    :root:not([data-theme="light"]) .productos-lista { color: #cfd6cf; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .estado-cabecera .flecha { transition: none; }
   }
 </style>
 </head>
@@ -150,104 +157,90 @@
 </div>
 
 <script>
-  // --- Configuración de conexión a Supabase (proyecto Valentina 2) ---
+  // Llama directo al RPC público (sin librerías externas). El servidor devuelve solo lo necesario:
+  // nombre, zona, foto, teléfono y productos con stock. Nunca lee las tablas de clientes/afiliados.
   const SUPABASE_URL = "https://tgvcvnhrwswuxgjbpvwq.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRndmN2bmhyd3N3dXhnamJwdndxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzMzQ3NjgsImV4cCI6MjEwNDkxMDc2OH0.9_n-EIfyxn6rSWbELMZfxnRVkBuQd1ZqKa-Z61mAHfA";
-  const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const SUPABASE_KEY = "sb_publishable_EKV8OM1y96u-DV_kUPGwkg_BZuGdf4D";
 
-  function slugify(t) {
-    return (t || "").toString().trim();
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, c => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
   }
 
-  // Convierte un teléfono guardado en cualquier formato a solo dígitos para wa.me
-  function soloDigitos(tel) {
-    return (tel || "").replace(/[^0-9]/g, "");
+  // Deja el teléfono en formato internacional para wa.me (0412... -> 58412...)
+  function telefonoWa(t) {
+    let d = String(t || "").replace(/\D/g, "");
+    if (!d) return "";
+    if (d.startsWith("0")) d = "58" + d.slice(1);
+    else if (!d.startsWith("58")) d = "58" + d;
+    return d;
   }
 
-  function mensajeWhatsApp(nombreProducto, estado) {
-    const texto = `Hola! Vengo de la plataforma de Naturaleza Abierta y estoy interesado en: ${nombreProducto}. ¿Aún lo tienes disponible? (Zona: ${estado})`;
-    return encodeURIComponent(texto);
+  function linkWhatsApp(telefono, producto, estado) {
+    const numero = telefonoWa(telefono);
+    if (!numero) return "";
+    const texto = `Hola! Vengo de la plataforma de Naturaleza Abierta y estoy interesado en: ${producto}. ¿Aún lo tienes disponible? (Zona: ${estado})`;
+    return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
+  }
+
+  // Solo permite fotos https para no inyectar esquemas raros en <img src>
+  function urlSegura(u) {
+    return /^https:\/\//i.test(String(u || "")) ? u : "";
   }
 
   async function cargarDirectorio() {
     const cont = document.getElementById("lista");
+    let filas;
 
-    const { data, error } = await client
-      .from("inventario_distribuidor")
-      .select(`
-        cantidad_disponible,
-        precio_venta_propio,
-        producto_id,
-        productos_servicios ( nombre ),
-        afiliados (
-          afiliado_id,
-          foto_url,
-          usuario_id,
-          clientes ( nombre, apellido, telefono, zona_estado_ciudad )
-        )
-      `)
-      .gt("cantidad_disponible", 0);
-
-    if (error) {
-      cont.innerHTML = `<div class="vacio">No se pudo cargar el directorio en este momento.</div>`;
-      console.error(error);
-      return;
-    }
-
-    if (!data || data.length === 0) {
-      cont.innerHTML = `<div class="vacio">Todavía no hay distribuidores con stock disponible.</div>`;
-      return;
-    }
-
-    // Agrupar por afiliado, y luego por estado
-    const porAfiliado = {};
-    for (const fila of data) {
-      const af = fila.afiliados;
-      if (!af) continue;
-      const id = af.afiliado_id;
-      if (!porAfiliado[id]) {
-        const cliente = af.clientes || {};
-        const zona = slugify(cliente.zona_estado_ciudad);
-        const partes = zona.split(",").map(p => p.trim()).filter(Boolean);
-        const estado = partes[0] || "Sin estado registrado";
-        const ciudad = partes[1] || "";
-        porAfiliado[id] = {
-          nombre: [cliente.nombre, cliente.apellido].filter(Boolean).join(" ") || "Distribuidor",
-          telefono: cliente.telefono || "",
-          foto: af.foto_url || "",
-          estado, ciudad,
-          productos: []
-        };
-      }
-      porAfiliado[id].productos.push({
-        nombre: fila.productos_servicios ? fila.productos_servicios.nombre : "Producto",
-        cantidad: fila.cantidad_disponible,
-        precio: fila.precio_venta_propio
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/fn_directorio_distribuidores_stock`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${SUPABASE_KEY}`
+        },
+        body: "{}"
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      filas = await res.json();
+    } catch (e) {
+      console.error("Directorio:", e);
+      cont.innerHTML = `<div class="vacio">No se pudo cargar el directorio en este momento. Intenta de nuevo en unos minutos.</div>`;
+      return;
     }
 
-    // Agrupar por estado > ciudad
+    if (!Array.isArray(filas) || filas.length === 0) {
+      cont.innerHTML = `<div class="vacio">Todavía no hay distribuidores con stock disponible.<br>Mientras tanto puedes pedir tu producto en el <a href="https://catalogo.naturalezaabierta.com/">catálogo</a>.</div>`;
+      return;
+    }
+
+    // Agrupar por estado > ciudad (zona_estado_ciudad = "Estado, Ciudad")
     const porEstado = {};
-    Object.values(porAfiliado).forEach(d => {
-      if (!porEstado[d.estado]) porEstado[d.estado] = {};
-      const ciudadKey = d.ciudad || "General";
-      if (!porEstado[d.estado][ciudadKey]) porEstado[d.estado][ciudadKey] = [];
-      porEstado[d.estado][ciudadKey].push(d);
+    filas.forEach(d => {
+      const partes = String(d.zona_estado_ciudad || "").split(",").map(p => p.trim()).filter(Boolean);
+      const estado = partes[0] || "Sin estado registrado";
+      const ciudad = partes[1] || "General";
+      (porEstado[estado] = porEstado[estado] || {});
+      (porEstado[estado][ciudad] = porEstado[estado][ciudad] || []).push({ ...d, estado });
     });
 
     cont.innerHTML = "";
-    Object.keys(porEstado).sort().forEach((estado, idx) => {
+    Object.keys(porEstado).sort((a, b) => a.localeCompare(b, "es")).forEach((estado, idx) => {
       const bloque = document.createElement("div");
       bloque.className = "estado-bloque";
 
       const btn = document.createElement("button");
+      btn.type = "button";
       btn.className = "estado-cabecera";
-      btn.innerHTML = `<span>${estado}</span><span class="flecha">▸</span>`;
+      btn.setAttribute("aria-expanded", idx === 0 ? "true" : "false");
+      btn.innerHTML = `<span>${esc(estado)}</span><span class="flecha" aria-hidden="true">▸</span>`;
 
       const contenido = document.createElement("div");
       contenido.className = "estado-contenido";
 
-      Object.keys(porEstado[estado]).sort().forEach(ciudad => {
+      Object.keys(porEstado[estado]).sort((a, b) => a.localeCompare(b, "es")).forEach(ciudad => {
         if (ciudad !== "General") {
           const t = document.createElement("div");
           t.className = "ciudad-titulo";
@@ -255,35 +248,34 @@
           contenido.appendChild(t);
         }
         porEstado[estado][ciudad].forEach(d => {
-          const tarjeta = document.createElement("div");
-          tarjeta.className = "tarjeta-distribuidor";
-
-          const productosHtml = d.productos.map(p => {
+          const productos = Array.isArray(d.productos) ? d.productos : [];
+          const productosHtml = productos.map(p => {
             const precio = p.precio ? ` — $${Number(p.precio).toFixed(2)}` : "";
-            return `<li>${p.nombre} (${p.cantidad} disp.)${precio}</li>`;
+            return `<li>${esc(p.nombre)} (${esc(p.cantidad)} disp.)${precio}</li>`;
           }).join("");
 
-          const primerProducto = d.productos[0] ? d.productos[0].nombre : "tus productos";
-          const numero = soloDigitos(d.telefono);
-          const linkWA = numero
-            ? `https://wa.me/${numero}?text=${mensajeWhatsApp(primerProducto, d.estado)}`
-            : "#";
+          const primero = productos[0] ? productos[0].nombre : "tus productos";
+          const link = linkWhatsApp(d.telefono_whatsapp, primero, d.estado);
+          const nombre = [d.nombre, d.apellido].filter(Boolean).join(" ") || "Distribuidor";
+          const foto = urlSegura(d.foto_url);
 
+          const tarjeta = document.createElement("div");
+          tarjeta.className = "tarjeta-distribuidor";
           tarjeta.innerHTML = `
-            <img class="foto" src="${d.foto || ''}" alt="" onerror="this.style.visibility='hidden'">
+            ${foto ? `<img class="foto" src="${esc(foto)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="foto" aria-hidden="true"></span>`}
             <div class="info">
-              <div class="nombre">${d.nombre}</div>
+              <div class="nombre">${esc(nombre)}</div>
               <ul class="productos-lista">${productosHtml}</ul>
-              <a class="whatsapp-btn" href="${linkWA}" target="_blank" rel="noopener">💬 Estoy interesado</a>
-            </div>
-          `;
+              ${link ? `<a class="whatsapp-btn" href="${esc(link)}" target="_blank" rel="noopener">Escribir por WhatsApp</a>` : ""}
+            </div>`;
           contenido.appendChild(tarjeta);
         });
       });
 
       btn.addEventListener("click", () => {
-        btn.classList.toggle("abierto");
-        contenido.classList.toggle("abierto");
+        const abierto = btn.classList.toggle("abierto");
+        contenido.classList.toggle("abierto", abierto);
+        btn.setAttribute("aria-expanded", abierto ? "true" : "false");
       });
 
       // El primer estado abierto por defecto
